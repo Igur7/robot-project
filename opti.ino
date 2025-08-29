@@ -1,0 +1,201 @@
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40); // domyślny adres PCA9685
+
+// --- Kanały PCA9685 ---
+#define CH_X     0
+#define CH_Y     1
+#define CH_BTN   2
+#define CH_BASE  3
+
+// --- Funkcja do zamiany kąta (0–180°) na wartość PWM ---
+int angleToPulse(byte angle) {
+  int pulselen = map(angle, 0, 180, 150, 600); // zakres 150–600 (standard dla serw)
+  return pulselen;
+}
+
+// --- Piny wejściowe ---
+int joyX = A0;
+int joyY = A1;
+int joySW = 2;       // joystick przycisk
+int buttonRec = 3;   // guzik nagrywania
+int buttonPlay = 4;  // guzik odtwarzania
+int buttonReset = 5; // guzik resetu pozycji
+int potBase = A2;    // potencjometr dla serwa bazowego
+
+// --- Pozycje ---
+byte posX = 90;
+byte posY = 90;
+byte posBase = 90;
+int deadZone = 100;
+
+// --- Tablice do zapisu sekwencji ---
+#define MAX_STEPS 128
+byte seqX[MAX_STEPS];
+byte seqY[MAX_STEPS];
+byte seqBtn[MAX_STEPS];
+byte seqBase[MAX_STEPS];
+int stepCount = 0;
+bool recording = false;
+bool playing = false;
+
+// --- obsługa toggle przycisków ---
+bool lastRecState = HIGH;
+bool lastPlayState = HIGH;
+bool lastResetState = HIGH;
+
+// --- toggle joystick button ---
+bool btnState = false;         // false = otwarte (90°), true = zamknięte (0°)
+bool lastJoySWState = HIGH;
+
+// --- odtwarzanie sekwencji ---
+int playIndex = 0;
+unsigned long lastPlayTime = 0;
+int playDelay = 100;
+
+// --- sterowanie serwami w trybie joysticka ---
+unsigned long lastMoveTime = 0;
+int moveInterval = 30;
+
+void setup() {
+  Wire.begin();
+  pwm.begin();
+  pwm.setPWMFreq(60); // serwa standard 50–60Hz
+
+  pinMode(joySW, INPUT_PULLUP);
+  pinMode(buttonRec, INPUT_PULLUP);
+  pinMode(buttonPlay, INPUT_PULLUP);
+  pinMode(buttonReset, INPUT_PULLUP);
+
+  // ustaw pozycje startowe
+  setServo(CH_X, posX);
+  setServo(CH_Y, posY);
+  setServo(CH_BTN, 90);
+  setServo(CH_BASE, posBase);
+}
+
+void loop() {
+  unsigned long currentTime = millis();
+
+  // --- JOYSTICK BUTTON toggle ---
+  bool currentJoySW = digitalRead(joySW);
+  if (lastJoySWState == HIGH && currentJoySW == LOW) {
+    btnState = !btnState;
+    setServo(CH_BTN, btnState ? 0 : 90);
+    delay(200);
+  }
+  lastJoySWState = currentJoySW;
+
+  // --- RECORD toggle ---
+  bool currentRecState = digitalRead(buttonRec);
+  if (lastRecState == HIGH && currentRecState == LOW) {
+    if (!recording) {
+      stepCount = 0;
+      recording = true;
+    } else {
+      recording = false;
+    }
+    delay(200);
+  }
+  lastRecState = currentRecState;
+
+  // --- PLAY toggle ---
+  bool currentPlayState = digitalRead(buttonPlay);
+  if (lastPlayState == HIGH && currentPlayState == LOW) {
+    if (!playing) {
+      playing = true;
+      playIndex = 0;
+    } else {
+      playing = false;
+    }
+    delay(200);
+  }
+  lastPlayState = currentPlayState;
+
+  // --- RESET pozycji ---
+  bool currentResetState = digitalRead(buttonReset);
+  if (lastResetState == HIGH && currentResetState == LOW) {
+    posX = 90;
+    posY = 90;
+    posBase = 90;
+    btnState = false;
+    setServo(CH_X, posX);
+    setServo(CH_Y, posY);
+    setServo(CH_BTN, 90);
+    setServo(CH_BASE, posBase);
+    delay(200);
+  }
+  lastResetState = currentResetState;
+
+  // --- Tryb nagrywania ---
+  if (recording) {
+    sterowanieJoystickiem(currentTime);
+    sterowanieBaza();
+
+    if (stepCount < MAX_STEPS && (currentTime - lastPlayTime >= playDelay)) {
+      // zapisuj tylko jeśli coś się zmieniło
+      if (stepCount == 0 || 
+          seqX[stepCount-1] != posX || 
+          seqY[stepCount-1] != posY || 
+          seqBtn[stepCount-1] != (btnState ? 0 : 90) || 
+          seqBase[stepCount-1] != posBase) {
+        seqX[stepCount] = posX;
+        seqY[stepCount] = posY;
+        seqBtn[stepCount] = (btnState ? 0 : 90);
+        seqBase[stepCount] = posBase;
+        stepCount++;
+      }
+      lastPlayTime = currentTime;
+    }
+  }
+  // --- Tryb odtwarzania ---
+  else if (playing) {
+    if (currentTime - lastPlayTime >= playDelay) {
+      if (playIndex < stepCount) {
+        setServo(CH_X, seqX[playIndex]);
+        setServo(CH_Y, seqY[playIndex]);
+        setServo(CH_BTN, seqBtn[playIndex]);
+        setServo(CH_BASE, seqBase[playIndex]);
+        playIndex++;
+      } else {
+        playing = false;
+      }
+      lastPlayTime = currentTime;
+    }
+  }
+  // --- Tryb normalny ---
+  else {
+    sterowanieJoystickiem(currentTime);
+    sterowanieBaza();
+  }
+}
+
+// --- Sterowanie joystickiem ---
+void sterowanieJoystickiem(unsigned long currentTime) {
+  if (currentTime - lastMoveTime >= moveInterval) {
+    int valX = analogRead(joyX);
+    if (valX < (512 - deadZone)) { if (posX > 0) posX--; }
+    else if (valX > (512 + deadZone)) { if (posX < 180) posX++; }
+    setServo(CH_X, posX);
+
+    int valY = analogRead(joyY);
+    if (valY < (512 - deadZone)) { if (posY > 0) posY--; }
+    else if (valY > (512 + deadZone)) { if (posY < 180) posY++; }
+    setServo(CH_Y, posY);
+
+    lastMoveTime = currentTime;
+  }
+}
+
+// --- Sterowanie bazą potencjometrem ---
+void sterowanieBaza() {
+  int potValue = analogRead(potBase);
+  posBase = map(potValue, 0, 1023, 0, 180);
+  setServo(CH_BASE, posBase);
+}
+
+// --- Funkcja sterująca serwem przez PCA9685 ---
+void setServo(uint8_t channel, byte angle) {
+  pwm.setPWM(channel, 0, angleToPulse(angle));
+}
