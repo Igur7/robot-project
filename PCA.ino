@@ -55,7 +55,7 @@ int playDelay = 100;
 
 // --- sterowanie serwami w trybie joysticka ---
 unsigned long lastMoveTime = 0;
-int moveInterval = 5;
+int moveInterval = 30;// ten parametr określa jak szybkoo poruszają się sewapoaz bazą w reakcji na joyatick 
 
 void setup() {
   Wire.begin();
