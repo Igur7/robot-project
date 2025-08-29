@@ -8,7 +8,7 @@ It features:
 a 3D-printed base with a hexagonal ventilation/grid pattern,
 multiple servo motors including a functional gripper,
 joystick and potentiometer control,
-buttons for additional functions,
+buttons for recording and saving movments and reseting arm to its basic positon,
 an external power supply for stable servo operation.
 The project is intended for learning mechanics, electronics, and embedded programming through hands-on building.
 
