@@ -27,19 +27,6 @@ Push buttons,
 potentiometer,
 Breadboard and jumper wires.
 
-⚡ Wiring / Connections
-Arduino Nano Pins:
-Joystick X → A0
-Joystick Y → A1
-Potentiometer → A2
-int buttonRec = 3;   // guzik nagrywania
-int buttonPlay = 4;  // guzik odtwarzania
-int buttonReset = 5; // guzik resetu pozycji
-Servo Base → D9
-Servo Arm Joint 1 → D10
-Servo Arm Joint 2 → D11
-Servo Gripper → D12
-
 Power:
 
 Arduino Nano powered by USB or VIN (7–12V)
