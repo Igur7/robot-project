@@ -1,4 +1,4 @@
-# robot-project
+![WhatsApp Image 2025-08-29 at 14 08 09](https://github.com/user-attachments/assets/8010f038-1251-42a5-ba07-5a83bdb6b355)# robot-project
 https://wokwi.com/projects/439749393075718145
 Arduino Nano Robot Arm Project
 📖 Description
@@ -47,3 +47,7 @@ Add more degrees of freedom to the arm,
 Enable wireless control (Bluetooth / Wi-Fi),
 
 
+![WhatsApp Image 2025-08-29 at 14 08 09](https://github.com/user-attachments/assets/b706d12c-3c11-4de3-882a-b6c6a318f827)
+![WhatsApp Image 2025-08-29 at 14 08 11](https://github.com/user-attachments/assets/2ead8035-6467-4506-a158-2e1607a83d58)
+![WhatsApp Image 2025-08-29 at 14 08 10](https://github.com/user-attachments/assets/523e5973-e2c1-4fae-ba20-e7eb0a7b786a)
+![WhatsApp Image 2025-08-29 at 14 08 10 (1)](https://github.com/user-attachments/assets/e0ebb197-76b1-4dbb-aa07-c27cf8f4de02)
