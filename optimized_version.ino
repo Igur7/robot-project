@@ -1,74 +1,67 @@
 #include <Wire.h>
 #include <Adafruit_PWMServoDriver.h>
 
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40); // domyślny adres PCA9685
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40); 
 
-// --- Kanały PCA9685 ---
 #define CH_X     0
 #define CH_Y     1
 #define CH_BTN   2
 #define CH_BASE  3
 
-// --- Funkcja do zamiany kąta (0–180°) na wartość PWM ---
 int angleToPulse(byte angle) {
-  int pulselen = map(angle, 0, 180, 150, 600); // zakres 150–600 (standard dla serw)
+  int pulselen = map(angle, 0, 180, 150, 600);
   return pulselen;
 }
 
-// --- Piny wejściowe ---
 int joyX = A0;
 int joyY = A1;
-int joySW = 2;       // joystick przycisk
-int buttonRec = 3;   // guzik nagrywania
-int buttonPlay = 4;  // guzik odtwarzania
-int buttonReset = 5; // guzik resetu pozycji
-int potBase = A2;    // potencjometr dla serwa bazowego
+int joySW = 2;
+int buttonRec = 3;
+int buttonPlay = 4;
+int buttonReset = 5;
+int potBase = A2;
 
-// --- Pozycje ---
 byte posX = 90;
 byte posY = 90;
 byte posBase = 90;
 int deadZone = 100;
 
-// --- Tablice do zapisu sekwencji ---
 #define MAX_STEPS 128
 byte seqX[MAX_STEPS];
 byte seqY[MAX_STEPS];
 byte seqBtn[MAX_STEPS];
 byte seqBase[MAX_STEPS];
+uint16_t seqDelay[MAX_STEPS];  
+
 int stepCount = 0;
 bool recording = false;
 bool playing = false;
 
-// --- obsługa toggle przycisków ---
 bool lastRecState = HIGH;
 bool lastPlayState = HIGH;
 bool lastResetState = HIGH;
 
-// --- toggle joystick button ---
-bool btnState = false;         // false = otwarte (90°), true = zamknięte (0°)
+bool btnState = false;
 bool lastJoySWState = HIGH;
 
-// --- odtwarzanie sekwencji ---
 int playIndex = 0;
 unsigned long lastPlayTime = 0;
+unsigned long lastStepTime = 0;  
 int playDelay = 100;
 
-// --- sterowanie serwami w trybie joysticka ---
 unsigned long lastMoveTime = 0;
 int moveInterval = 30;
 
 void setup() {
   Wire.begin();
   pwm.begin();
-  pwm.setPWMFreq(60); // serwa standard 50–60Hz
+  pwm.setPWMFreq(60);
 
   pinMode(joySW, INPUT_PULLUP);
   pinMode(buttonRec, INPUT_PULLUP);
   pinMode(buttonPlay, INPUT_PULLUP);
   pinMode(buttonReset, INPUT_PULLUP);
 
-  // ustaw pozycje startowe
   setServo(CH_X, posX);
   setServo(CH_Y, posY);
   setServo(CH_BTN, 90);
@@ -93,6 +86,7 @@ void loop() {
     if (!recording) {
       stepCount = 0;
       recording = true;
+      lastStepTime = currentTime;   
     } else {
       recording = false;
     }
@@ -106,6 +100,7 @@ void loop() {
     if (!playing) {
       playing = true;
       playIndex = 0;
+      lastPlayTime = currentTime;
     } else {
       playing = false;
     }
@@ -134,16 +129,22 @@ void loop() {
     sterowanieBaza();
 
     if (stepCount < MAX_STEPS && (currentTime - lastPlayTime >= playDelay)) {
-      // zapisuj tylko jeśli coś się zmieniło
       if (stepCount == 0 || 
           seqX[stepCount-1] != posX || 
           seqY[stepCount-1] != posY || 
           seqBtn[stepCount-1] != (btnState ? 0 : 90) || 
           seqBase[stepCount-1] != posBase) {
+        
+        // zapis pozycji
         seqX[stepCount] = posX;
         seqY[stepCount] = posY;
         seqBtn[stepCount] = (btnState ? 0 : 90);
         seqBase[stepCount] = posBase;
+
+        // zapis czasu od poprzedniego kroku
+        seqDelay[stepCount] = (uint16_t)(currentTime - lastStepTime);
+        lastStepTime = currentTime;
+
         stepCount++;
       }
       lastPlayTime = currentTime;
@@ -151,17 +152,16 @@ void loop() {
   }
   // --- Tryb odtwarzania ---
   else if (playing) {
-    if (currentTime - lastPlayTime >= playDelay) {
-      if (playIndex < stepCount) {
-        setServo(CH_X, seqX[playIndex]);
-        setServo(CH_Y, seqY[playIndex]);
-        setServo(CH_BTN, seqBtn[playIndex]);
-        setServo(CH_BASE, seqBase[playIndex]);
-        playIndex++;
-      } else {
-        playing = false;
-      }
+    if (playIndex < stepCount && (currentTime - lastPlayTime >= seqDelay[playIndex])) {
+      setServo(CH_X, seqX[playIndex]);
+      setServo(CH_Y, seqY[playIndex]);
+      setServo(CH_BTN, seqBtn[playIndex]);
+      setServo(CH_BASE, seqBase[playIndex]);
+      
       lastPlayTime = currentTime;
+      playIndex++;
+    } else if (playIndex >= stepCount) {
+      playing = false;
     }
   }
   // --- Tryb normalny ---
@@ -195,7 +195,7 @@ void sterowanieBaza() {
   setServo(CH_BASE, posBase);
 }
 
-// --- Funkcja sterująca serwem przez PCA9685 ---
+// --- Sterowanie serwem ---
 void setServo(uint8_t channel, byte angle) {
   pwm.setPWM(channel, 0, angleToPulse(angle));
 }
